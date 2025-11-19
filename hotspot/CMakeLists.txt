@@ -76,6 +76,8 @@ include_directories(
         
         # 生成的文件目录
         ${CMAKE_BINARY_DIR}/generated
+        ${CMAKE_BINARY_DIR}/generated/jvmtifiles
+        ${CMAKE_BINARY_DIR}/generated/tracefiles
 )
 
 # 创建生成文件的目录
@@ -101,23 +103,16 @@ add_custom_command(
     OUTPUT 
         ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
         ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-        ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnter.cpp
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/jvmtifiles
     COMMAND ${CMAKE_COMMAND} -E echo "Generating JVMTI files..."
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.h ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiEnv.hpp ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiEnter.hpp ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnter.hpp
-    DEPENDS 
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.h
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiEnv.hpp
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiEnter.hpp
-    COMMENT "Generating JVMTI files"
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
+    COMMENT "Generating JVMTI placeholder files"
 )
 
 add_custom_target(jvmti_files DEPENDS 
     ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
     ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-    ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnter.hpp
 )
 
 # Trace文件生成
@@ -127,12 +122,9 @@ add_custom_command(
         ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/tracefiles
     COMMAND ${CMAKE_COMMAND} -E echo "Generating Trace files..."
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceDataTypes.hpp ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEvent.hpp ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
-    DEPENDS 
-        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceDataTypes.hpp
-        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEvent.hpp
-    COMMENT "Generating Trace files"
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
+    COMMENT "Generating Trace placeholder files"
 )
 
 add_custom_target(trace_files DEPENDS 
