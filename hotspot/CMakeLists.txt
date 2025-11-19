@@ -98,6 +98,20 @@ function(find_hotspot_sources DIR VARIABLE_NAME)
     set(${VARIABLE_NAME} ${${VARIABLE_NAME}} PARENT_SCOPE)
 endfunction()
 
+# 编译JVMTI生成工具
+add_custom_command(
+    OUTPUT 
+        ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND} -E echo "Compiling JVMTI generator tool..."
+    COMMAND javac -d ${CMAKE_BINARY_DIR}/generated ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java
+    COMMENT "Compiling JVMTI generator tool"
+    VERBATIM
+)
+
+add_custom_target(jvmti_gen_tool DEPENDS ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class)
+
 # JVMTI文件生成
 add_custom_command(
     OUTPUT 
@@ -105,9 +119,15 @@ add_custom_command(
         ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/jvmtifiles
     COMMAND ${CMAKE_COMMAND} -E echo "Generating JVMTI files..."
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-    COMMENT "Generating JVMTI placeholder files"
+    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiH.xsl -OUT ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
+    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiHpp.xsl -OUT ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
+    DEPENDS 
+        jvmti_gen_tool
+        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml
+        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiH.xsl
+        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiHpp.xsl
+    COMMENT "Generating JVMTI files"
+    VERBATIM
 )
 
 add_custom_target(jvmti_files DEPENDS 
@@ -122,9 +142,15 @@ add_custom_command(
         ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/tracefiles
     COMMAND ${CMAKE_COMMAND} -E echo "Generating Trace files..."
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
-    COMMENT "Generating Trace placeholder files"
+    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceTypes.xsl -OUT ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
+    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEventIds.xsl -OUT ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
+    DEPENDS 
+        jvmti_gen_tool
+        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml
+        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceTypes.xsl
+        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEventIds.xsl
+    COMMENT "Generating Trace files"
+    VERBATIM
 )
 
 add_custom_target(trace_files DEPENDS 
