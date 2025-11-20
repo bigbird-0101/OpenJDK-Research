@@ -9,7 +9,7 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_COMPILER gcc)
 set(CMAKE_CXX_COMPILER g++)
 
-# Cygwin编译标志
+# 添加字符集选项解决乱码问题
 add_compile_options(
         -Wall
         -Wextra
@@ -18,6 +18,8 @@ add_compile_options(
         -Wno-deprecated-declarations
         -fno-rtti
         -fno-exceptions
+        -fexec-charset=UTF-8
+        -finput-charset=UTF-8
 )
 
 # JDK8 HotSpot特定定义
@@ -73,7 +75,7 @@ include_directories(
         ${CMAKE_SOURCE_DIR}/src/cpu/x86/vm
         ${CMAKE_SOURCE_DIR}/src/os/windows/vm
         ${CMAKE_SOURCE_DIR}/src/os_cpu/windows_x86/vm
-        
+
         # 生成的文件目录
         ${CMAKE_BINARY_DIR}/generated
         ${CMAKE_BINARY_DIR}/generated/jvmtifiles
@@ -98,65 +100,88 @@ function(find_hotspot_sources DIR VARIABLE_NAME)
     set(${VARIABLE_NAME} ${${VARIABLE_NAME}} PARENT_SCOPE)
 endfunction()
 
-# 编译JVMTI生成工具
-add_custom_command(
-    OUTPUT 
-        ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated
-    COMMAND ${CMAKE_COMMAND} -E echo "Compiling JVMTI generator tool..."
-    COMMAND javac -d ${CMAKE_BINARY_DIR}/generated ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java
-    DEPENDS ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java
-    COMMENT "Compiling JVMTI generator tool"
-    VERBATIM
-)
+# 首先检查 jvmtiGen.java 文件是否存在
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java)
+    message(WARNING "jvmtiGen.java not found at: ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java")
+    message(STATUS "Skipping JVMTI tool compilation - file not found")
 
-add_custom_target(jvmti_gen_tool DEPENDS ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class)
+    # 创建空目标以避免构建失败
+    add_custom_target(jvmti_gen_tool)
+    add_custom_target(jvmti_files)
+    add_custom_target(trace_files)
+else()
+    message(STATUS "Found jvmtiGen.java, setting up JVMTI generation")
 
-# JVMTI文件生成
-add_custom_command(
-    OUTPUT 
-        ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
-        ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/jvmtifiles
-    COMMAND ${CMAKE_COMMAND} -E echo "Generating JVMTI files..."
-    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiH.xsl -OUT ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
-    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiHpp.xsl -OUT ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-    DEPENDS 
-        jvmti_gen_tool
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiH.xsl
-        ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiHpp.xsl
-    COMMENT "Generating JVMTI files"
-    VERBATIM
-)
+    # 将Cygwin路径转换为Windows路径
+    string(REPLACE "/cygdrive/" "" CMAKE_SOURCE_DIR_CLEAN ${CMAKE_SOURCE_DIR})
+    string(REPLACE "/" "\\" CMAKE_SOURCE_DIR_WIN ${CMAKE_SOURCE_DIR_CLEAN})
+    string(REGEX REPLACE "^([a-z])" "\\1:" CMAKE_SOURCE_DIR_WIN ${CMAKE_SOURCE_DIR_WIN})
 
-add_custom_target(jvmti_files DEPENDS 
-    ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
-    ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
-)
+    string(REPLACE "/cygdrive/" "" CMAKE_BINARY_DIR_CLEAN ${CMAKE_BINARY_DIR})
+    string(REPLACE "/" "\\" CMAKE_BINARY_DIR_WIN ${CMAKE_BINARY_DIR_CLEAN})
+    string(REGEX REPLACE "^([a-z])" "\\1:" CMAKE_BINARY_DIR_WIN ${CMAKE_BINARY_DIR_WIN})
 
-# Trace文件生成
-add_custom_command(
-    OUTPUT 
-        ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
-        ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/tracefiles
-    COMMAND ${CMAKE_COMMAND} -E echo "Generating Trace files..."
-    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceTypes.xsl -OUT ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
-    COMMAND java -cp ${CMAKE_BINARY_DIR}/generated jvmtiGen -IN ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml -XSL ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEventIds.xsl -OUT ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
-    DEPENDS 
-        jvmti_gen_tool
-        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml
-        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceTypes.xsl
-        ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEventIds.xsl
-    COMMENT "Generating Trace files"
-    VERBATIM
-)
+    # 编译JVMTI生成工具 - 使用工作目录和相对路径
+    add_custom_command(
+            OUTPUT
+            ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated
+            COMMAND ${CMAKE_COMMAND} -E echo "Compiling JVMTI generator tool..."
+            # 使用PowerShell执行javac命令，避免路径问题
+            COMMAND powershell -Command "javac -d '${CMAKE_BINARY_DIR_WIN}\\generated' '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\prims\\jvmtiGen.java'"
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            DEPENDS ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java
+            COMMENT "Compiling JVMTI generator tool"
+    )
 
-add_custom_target(trace_files DEPENDS 
-    ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
-    ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
-)
+    add_custom_target(jvmti_gen_tool DEPENDS ${CMAKE_BINARY_DIR}/generated/jvmtiGen.class)
+
+    # JVMTI文件生成
+    add_custom_command(
+            OUTPUT
+            ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
+            ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/jvmtifiles
+            COMMAND ${CMAKE_COMMAND} -E echo "Generating JVMTI files..."
+            COMMAND powershell -Command "java -cp '${CMAKE_BINARY_DIR_WIN}\\generated' jvmtiGen -IN '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\prims\\jvmti.xml' -XSL '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\prims\\jvmtiH.xsl' -OUT '${CMAKE_BINARY_DIR_WIN}\\generated\\jvmtifiles\\jvmti.h'"
+            COMMAND powershell -Command "java -cp '${CMAKE_BINARY_DIR_WIN}\\generated' jvmtiGen -IN '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\prims\\jvmti.xml' -XSL '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\prims\\jvmtiHpp.xsl' -OUT '${CMAKE_BINARY_DIR_WIN}\\generated\\jvmtifiles\\jvmtiEnv.hpp'"
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            DEPENDS
+            jvmti_gen_tool
+            ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmti.xml
+            ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiH.xsl
+            ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiHpp.xsl
+            COMMENT "Generating JVMTI files"
+    )
+
+    add_custom_target(jvmti_files DEPENDS
+            ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmti.h
+            ${CMAKE_BINARY_DIR}/generated/jvmtifiles/jvmtiEnv.hpp
+    )
+
+    # Trace文件生成
+    add_custom_command(
+            OUTPUT
+            ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
+            ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/generated/tracefiles
+            COMMAND ${CMAKE_COMMAND} -E echo "Generating Trace files..."
+            COMMAND powershell -Command "java -cp '${CMAKE_BINARY_DIR_WIN}\\generated' jvmtiGen -IN '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\trace\\trace.xml' -XSL '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\trace\\traceTypes.xsl' -OUT '${CMAKE_BINARY_DIR_WIN}\\generated\\tracefiles\\traceTypes.hpp'"
+            COMMAND powershell -Command "java -cp '${CMAKE_BINARY_DIR_WIN}\\generated' jvmtiGen -IN '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\trace\\trace.xml' -XSL '${CMAKE_SOURCE_DIR_WIN}\\src\\share\\vm\\trace\\traceEventIds.xsl' -OUT '${CMAKE_BINARY_DIR_WIN}\\generated\\tracefiles\\traceEventIds.hpp'"
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+            DEPENDS
+            jvmti_gen_tool
+            ${CMAKE_SOURCE_DIR}/src/share/vm/trace/trace.xml
+            ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceTypes.xsl
+            ${CMAKE_SOURCE_DIR}/src/share/vm/trace/traceEventIds.xsl
+            COMMENT "Generating Trace files"
+    )
+
+    add_custom_target(trace_files DEPENDS
+            ${CMAKE_BINARY_DIR}/generated/tracefiles/traceTypes.hpp
+            ${CMAKE_BINARY_DIR}/generated/tracefiles/traceEventIds.hpp
+    )
+endif()
 
 # 收集各个模块的源文件
 find_hotspot_sources("src/share/vm" SHARE_SOURCES)
@@ -184,7 +209,11 @@ set(ALL_SOURCES
 
 # 创建jvm.dll目标（Cygwin中为libjvm.dll）
 add_library(jvm SHARED ${ALL_SOURCES})
-add_dependencies(jvm jvmti_files trace_files)
+
+# 只有在文件存在时才添加依赖
+if(EXISTS ${CMAKE_SOURCE_DIR}/src/share/vm/prims/jvmtiGen.java)
+    add_dependencies(jvm jvmti_files trace_files)
+endif()
 
 # 设置目标属性
 set_target_properties(jvm PROPERTIES
@@ -208,6 +237,7 @@ add_executable(jvmMain main.cpp)
 
 # 链接hotspot库到可执行文件
 target_link_libraries(jvmMain jvm)
+
 # 输出信息
 message(STATUS "JDK8 HotSpot配置完成")
 message(STATUS "编译器: ${CMAKE_C_COMPILER}")
