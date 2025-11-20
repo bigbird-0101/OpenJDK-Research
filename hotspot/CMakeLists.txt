@@ -37,6 +37,14 @@ add_definitions(
         -DINCLUDE_TRACE
         # 添加JNI必要的定义
         -DTARGET_ARCH_x86
+        # 添加VALUE_OBJ_CLASS_SPEC定义为空，解决Cygwin编译问题
+        -DVALUE_OBJ_CLASS_SPEC=
+        # 添加PRIxPTR格式化宏定义
+        -DPRIxPTR=\"llx\"
+        # 添加BREAKPOINT定义
+        -DBREAKPOINT=::__debugbreak()
+        # 添加prototype定义
+        -Dprototype=prototype()
 )
 
 # 调试信息
